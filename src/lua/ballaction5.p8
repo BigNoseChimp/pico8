@@ -9,8 +9,85 @@ cam={
  y=0
 }
 
+
+function _init()
+ for x=70,300,10 do
+   add_enemy(x+rnd(10),30+rnd(10))
+ end
+end
+
+function _update60()
+  if (btn(0)) change_a(ship, ship.a+ship.turnspeed-(ship.spd/500))
+  if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
+  
+  ship.spd-=0.02
+  if btn(4) then
+   ship.spd += 0.04
+  end
+  ship.acc = btn(4)
+  if btnp(5) then
+   if #bullets < 30 then
+    fire_weapon(ship)
+    fire_weapon(ship)
+    fire_weapon(ship)
+    fire_weapon(ship)
+    fire_weapon(ship)
+    fire_weapon(ship)
+   end
+ --  if ship.cooldown > 0 then
+ --   ship.cooldown-=1
+ --  elseif #bullets > 20 then
+--   ship.fire=4
+ --   ship.cooldown = 30
+ --  else
+ --   ship.fire=9
+ --   fire_weapon(ship)
+ --  end
+  else
+   ship.fire=0
+  end
+
+
+  ship:upd() 
+  foreach(trails,function(o) o:upd() end)
+  foreach(bullets,function(o) o:upd() end)
+  foreach(enemies,function(o) o:upd() end)
+ 
+ foreach(explosions,function(o) o:upd() end)
+ 
+ has_hit_enemy(ship,4,4,
+   function(e) 
+    if not ship.dead then
+     ship.death_count+=1
+    end
+    ship.dead=true 
+   end)
+
+end
+
+function _draw()
+  cls()
+ 
+  map(0,0,0,0,128,128)
+  camera(mid(0,ship.x-60,266),mid(0,ship.y-60,200))
+
+  foreach(explosions,function(e) e:drw() end) 
+  foreach(trails,function(o) o:drw() end)
+  foreach(bullets,function(x) x:drw() end)
+  foreach(enemies,function(e) e:drw() end)
+  ship:drw()
+
+  print(ship.e_count,ship.x-5,ship.y+10,9)
+  print(ship.death_count,ship.x+5,ship.y+10,13)
+
+  ship.msg=""
+end  
+-->8
+--ship
 ship = {
  cooldown=0,
+ e_count=0,
+ death_count=0,
  msg="",
  dead=false,
  what="ship",
@@ -71,76 +148,6 @@ ship = {
   move() 
  end
 }
-
-function _init()
- for x=70,300,10 do
-   add_enemy(x+rnd(10),10*rnd(10))
- end
-end
-
-function vert_velocity()
- return sin(-ship.a)*ship.spd
-end
-
-function _update60()
-  if (btn(0)) change_a(ship, ship.a+ship.turnspeed-(ship.spd/500))
-  if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
-  
-  ship.spd-=0.02
-  if btn(4) then
-   ship.spd += 0.04
-  end
-  ship.acc = btn(4)
-  if btnp(5) then
-   if #bullets < 30 then
-    fire_weapon(ship)
-    fire_weapon(ship)
-    fire_weapon(ship)
-    fire_weapon(ship)
-    fire_weapon(ship)
-    fire_weapon(ship)
-   end
- --  if ship.cooldown > 0 then
- --   ship.cooldown-=1
- --  elseif #bullets > 20 then
---   ship.fire=4
- --   ship.cooldown = 30
- --  else
- --   ship.fire=9
- --   fire_weapon(ship)
- --  end
-  else
-   ship.fire=0
-  end
-
-
-  ship:upd() 
-  foreach(trails,function(o) o:upd() end)
-  foreach(bullets,function(o) o:upd() end)
-  foreach(enemies,function(o) o:upd() end)
- 
- foreach(explosions,function(o) o:upd() end)
- 
- has_hit_enemy(ship,4,4,
-   function(e) ship.dead=true end)
-
-end
-
-function _draw()
-  cls()
- 
-  map(0,0,0,0,128,128)
-  camera(mid(0,ship.x-60,266),mid(0,ship.y-60,200))
-
-  foreach(explosions,function(e) e:drw() end) 
-  foreach(trails,function(o) o:drw() end)
-  foreach(bullets,function(x) x:drw() end)
-  foreach(enemies,function(e) e:drw() end)
-  ship:drw()
-
-  print(ship.msg,ship.x,ship.y+10,7)
-  ship.msg=""
-end  
 -->8
 -- movement
 
@@ -209,8 +216,6 @@ function has_hit_enemy(o,width,height,f)
    end 
    x=flr(x)
    y=flr(y)
- --  o.msg=o.msg.."("..x..","..y..")"
- --  o.msg=o.msg.."("..e.x..","..e.y..")"
 
    if ( 
      -- leftmost o right of rightmost e
@@ -223,9 +228,7 @@ function has_hit_enemy(o,width,height,f)
      (y+height < e.y)
     ) then
       -- ok
-  --    o.msg=o.msg.." alive"
     else
-  --    o.msg=o.msg.." dead"
      f(e)
     end
   end)
@@ -322,8 +325,11 @@ function fire_weapon(ship)
    end
    has_hit_enemy(self,0,0,
       function(e) 
-       e.dead=true
-       del(bullets,self)
+       if not e.dead then
+        ship.e_count+=1
+        e.dead=true
+        del(bullets,self)
+       end
       end )
   end
  }
@@ -357,7 +363,7 @@ function add_enemy(x,y)
   dy=0,
   sp=4,
   spmod=0,
-  a=0.25,
+  a=rnd(1),
   spd=1,
   frame=0,
   dead=false,
@@ -401,7 +407,7 @@ function add_enemy(x,y)
  }
  add(enemies,enemy)
 end
--->8
+
 -- explosions
 explosions={}
 
