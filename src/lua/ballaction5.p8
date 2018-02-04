@@ -114,11 +114,9 @@ ship = {
            ,self.accplt[flr(self.spd)+1])
    end
   if not self.dead then
-   local p=pget(self.x-cos(self.a)*4,
-    self.y-sin(self.a)*4)
- 
+   p=0
    if ( ship.fire > 0 ) then 
-   p = ship.fire
+    p = ship.fire
    end
    circfill(self.x, self.y, self.r, 7)
    circfill(self.x, self.y, self.r-1, 6)
@@ -214,11 +212,11 @@ function has_hit_enemy(o,width,height,f)
 
    if ( 
      -- leftmost o right of rightmost e
-     (x > e.x-e.offset+e.size) or
+     (x > e.x-e.offset+e.size*2) or
      -- rightmost o left of leftmost e
      (x+width < e.x-e.offset) or
      -- topmost o below bottom e
-     (y > e.y-e.offset+e.size) or -- todo: e.height
+     (y > e.y-e.offset+e.size*2) or -- todo: e.height
      -- bottommost o above top e
      (y+height < (e.y-e.offset))
     ) then
@@ -330,10 +328,12 @@ function fire_weapon(ship)
    if self.new == nil then
     self.new=true
    else
-    if (self.dead_count < 0) 
-     or (x_collide(self,f_blk))
-     or (y_collide(self,f_blk)) then
+    if (self.dead_count < 0) then 
      del(bullets,self)
+    elseif (x_collide(self,f_blk)) then
+     bounce_x(self,false)
+    elseif (y_collide(self,f_blk)) then
+     bounce_y(self,false) 
     else
      self.dead_count-=1 
     end
@@ -399,6 +399,7 @@ function add_enemy(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6,4)
+    add_explosion2(self.x,self.y)
     del(enemies,self)
    end
    self.spmod=(self.spmod+1) %2
@@ -453,6 +454,7 @@ function add_enemy2(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6)
+    add_explosion2(self.x,self.y)
     del(enemies,self)
    end
    -- homing
@@ -490,6 +492,7 @@ function add_enemy3(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6)
+    add_explosion2(self.x,self.y)
     del(enemies,self)
    end
    self.a+=0.01
@@ -537,6 +540,46 @@ function add_explosion(x,y)
   end 
  }
  add(explosions,e)
+end
+
+function add_explosion2(x,y)
+ local e={
+  x=x,
+  y=y,
+  t=25,
+  sparks={
+   },
+  upd=function(self)
+   if #self.sparks<=0 then
+    for i=1,30 do
+     local spark={
+      x=x,
+      y=y,
+      a=rnd(1),
+      col=7
+     }
+     add(self.sparks,spark)
+    end
+   elseif self.t < 0 then
+    del(explosions,self)
+   else
+    self.t-=1
+    foreach(self.sparks,
+     function(o)
+      o.x=o.x+(rnd(1)-0.5)+cos(o.a)/2
+      o.y=o.y+(rnd(1)-0.5)+sin(o.a)/2
+     end)
+   end
+  end,
+  drw=function(self)
+   foreach(self.sparks,
+    function(o)
+     pset(o.x,o.y,o.col)
+    end)
+  end 
+ }
+ add(explosions,e)
+
 end
 __gfx__
 00000000066666600000000000000000000880000000000099009908000880000008800000088000000000000000000000000000000000000000000000000000
