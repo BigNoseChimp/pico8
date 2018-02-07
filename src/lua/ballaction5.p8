@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 -- main
+highscore=0
 
 function _init()
 	g = {
@@ -10,13 +11,21 @@ function _init()
 		lvl=0,
 		timer=0,
 		gamestate="INIT",
-    highscore=0,
     lives=3
 	}
 
 end
 
 function _update60()
+  if ( g.gamestate=="GAMEOVER" ) then
+  	if ( btn(4) and btn(5) ) then
+     _init()
+    end
+  	ship:fire_weapon(btn(5))
+    foreach(enemies,function(o) o:upd() end)
+    return
+  end
+
 	g.timer+=1/60
 	choose_level()
 
@@ -40,8 +49,11 @@ function _update60()
      sfx(4)
      ship.dead=true 
      ship.death_count+=1
+     g.lives-=1
      ship.cooldown=60
-     foreach(enemies,function(e) del(enemies,e)end)
+     if ( g.lives != 0 ) then
+     	foreach(enemies,function(e) del(enemies,e)end)
+     end
      g.lvl-=1
     end
    end)
@@ -64,16 +76,20 @@ function _draw()
 
   rectfill(ship.x-5,ship.y+6,ship.x-5+(15-#bullets/2),ship.y+8,9)
 
-  print(ship.e_count,ship.x-5,ship.y+10,9)
-  print(ship.death_count,ship.x+5,ship.y+10,13)
-
-  print(ship.msg.." "
+  if ( g.lives <= 0 ) then
+   	g.gamestate="GAMEOVER"
+   	print("G A M E  O V E R", cam_x+40,cam_y+60,7)
+  else
+  	print(ship.e_count,ship.x-5,ship.y+10,9)
+  	print(ship.death_count,ship.x+5,ship.y+10,13)
+  	print(ship.msg.." "
        ..flr(g.timer).."."
        ..flr(g.timer%1 * 10^2),
-       cam_x+50, cam_y+10, 7)
-
-  print("e["..#enemies.."]",
+       cam_x+40, cam_y+10, 7)
+  	print("e["..#enemies.."]",
 			cam_x+110,cam_y+10, 9)
+  	print(g.lives.."UP", cam_x+10,cam_y+10, 7)
+  end
 end  
 -->8
 --ship
