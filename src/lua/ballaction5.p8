@@ -2,24 +2,28 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 -- main
-highscore=0
+g={}
 
 function _init()
-	g = {
-		sizex=32*8,
-		sizey=32*8,
-		lvl=0,
-		timer=0,
-		gamestate="INIT",
-    lives=3
-	}
+ cartdata("bignosechimp_picowars_1")
+ highscore=dget(0)
+ setup()
+end
 
+function setup()
+ g.score=0
+	g.sizex=32*8
+	g.sizey=32*8
+	g.lvl=0
+	g.timer=0
+	g.gamestate="INIT"
+    	g.lives=3
 end
 
 function _update60()
   if ( g.gamestate=="GAMEOVER" ) then
   	if ( btn(4) and btn(5) ) then
-     _init()
+     setup()
     end
   	ship:fire_weapon(btn(5))
     foreach(enemies,function(o) o:upd() end)
@@ -38,12 +42,13 @@ function _update60()
 
   ship:upd() 
 
+  foreach(scores,function(o) o:upd() end)
   foreach(trails,function(o) o:upd() end)
   foreach(bullets,function(o) o:upd() end)
   foreach(enemies,function(o) o:upd() end)
- 	foreach(explosions,function(o) o:upd() end)
+  foreach(explosions,function(o) o:upd() end)
  
- 	has_hit_enemy(ship,4,4,
+  has_hit_enemy(ship,4,4,
    function(e) 
     if not ship.dead then
      sfx(4)
@@ -57,7 +62,6 @@ function _update60()
      g.lvl-=1
     end
    end)
-
 end
 
 function _draw()
@@ -72,16 +76,25 @@ function _draw()
   foreach(trails,function(o) o:drw() end)
   foreach(bullets,function(x) x:drw() end)
   foreach(enemies,function(e) e:drw() end)
+  foreach(scores,function(e) e:drw() end) 
   ship:drw()
 
   rectfill(ship.x-5,ship.y+6,ship.x-5+(15-#bullets/2),ship.y+8,9)
 
   if ( g.lives <= 0 ) then
    	g.gamestate="GAMEOVER"
-   	print("G A M E  O V E R", cam_x+40,cam_y+60,7)
+   	print("G A M E  O V E R", cam_x+35,cam_y+50,7)
+    	if ( highscore==nil or g.score > highscore ) then
+   	 print("NEW HIGH SCORE! "..g.score, cam_x+35, cam_y+60, 7)
+         highscore=g.score
+         dset(0,highscore)
+        else
+         print("S C O R E : "..g.score, cam_x+35, cam_y+60, 7)
+        end
+         print("PRESS Z+X TO PLAY AGAIN",
+			cam_x+20, cam_y+70, 7)
   else
-  	print(ship.e_count,ship.x-5,ship.y+10,9)
-  	print(ship.death_count,ship.x+5,ship.y+10,13)
+  	print(g.score,ship.x-5,ship.y+10,9)
   	print(ship.msg.." "
        ..flr(g.timer).."."
        ..flr(g.timer%1 * 10^2),
@@ -89,6 +102,7 @@ function _draw()
   	print("e["..#enemies.."]",
 			cam_x+110,cam_y+10, 9)
   	print(g.lives.."UP", cam_x+10,cam_y+10, 7)
+  	print("hi:"..highscore, cam_x+10,cam_y, 8)
   end
 end  
 -->8
@@ -96,7 +110,7 @@ end
 ship = {
  offset=2,
  cooldown=0,
- e_count=0,
+ score=0,
  death_count=0,
  msg="",
  dead=false,
@@ -324,6 +338,7 @@ function choose_level()
 --  elseif g.timer > g.lvl*8 and g.lvl>0 then
   elseif #enemies == 0 then
    level(g.lvl+1)
+   add_floater(ship.x,ship.y,"l e v e l "..g.lvl)
   end 
 end
 
@@ -384,7 +399,6 @@ function fire_weapon(ship)
       function(e) 
        if not e.dead then
         e.dead=true
-        ship.e_count+=1
         del(bullets,self)
        end
       end )
@@ -444,6 +458,8 @@ function add_enemy(x,y,l)
     sfx(6,4)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
+    g.score+=1*l
+    add_floater(self.x,self.y,1*l)
    end
    self.spmod=(self.spmod+1) %2
    self.dx=cos(self.a)*self.spd
@@ -499,6 +515,8 @@ function add_enemy_homing(x,y,l)
     sfx(6)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
+    g.score+=1*l
+    add_floater(self.x,self.y,1*l)
    end
    -- homing
    if self.x<ship.x then
@@ -520,6 +538,31 @@ function add_enemy_homing(x,y,l)
  add(enemies,enemy)
 end
 
+scores={}
+
+function add_floater(x,y,s)
+ local scr={
+  x=x,
+  y=y,
+  value=s,
+  a=rnd(1),
+  timer=120,
+  upd = function(self) 
+   self.timer-=1
+   if (self.timer<=0) then
+    del(scores,self)
+   else
+    self.x+=cos(self.a)*0.5
+    self.y+=sin(self.a)*0.5
+   end
+  end,
+  drw = function(self)
+   print(self.value,self.x,self.y,9+(self.timer%3))
+  end
+ }
+ add(scores,scr)
+end
+
 function add_enemy_rocket(x,y,l)
  local enemy={
   offset=0,
@@ -538,6 +581,8 @@ function add_enemy_rocket(x,y,l)
     sfx(6)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
+    g.score+=1*l
+    add_floater(self.x,self.y,1*l)
    end
    -- homing
    if self.x<ship.x then
@@ -575,14 +620,15 @@ function add_enemy_balloon(x,y,l)
    if (self.dead) then
     sfx(6)
     if ( self.size > 2 ) then
-  		self.size-=1
-			self.offset=self.size/2
-			ship.e_count+=1
+  	self.size-=1
+	self.offset=self.size/2
     else
     	add_explosion(self.x,self.y,25)
     	del(enemies,self)
-			return
-		end
+	g.score+=1*l
+        add_floater(self.x,self.y,1*l)
+	return
+    end
    end
    self.a+=0.01
    self.dx=cos(self.a)*(self.spd+(l/5))
