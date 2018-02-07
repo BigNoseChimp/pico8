@@ -12,23 +12,28 @@ end
 
 function setup()
  g.score=0
-	g.sizex=32*8
+ g.sizex=32*8
 	g.sizey=32*8
 	g.lvl=0
 	g.timer=0
-	g.gamestate="INIT"
+	g.gamestate="init"
     	g.lives=3
+    foreach(enemies,function(o) del(enemies,o) end)
+    foreach(explosions,function(o) del(explosions,o) end)
+    foreach(trails,function(o) del(trails,o) end)
+    foreach(bullets,function(o) del(bullets,o) end)
+    foreach(floaters,function(o) del(floaters,o) end)
 end
 
 function _update60()
-  if ( g.gamestate=="GAMEOVER" ) then
-  	if ( btn(4) and btn(5) ) then
+  if ( g.gamestate=="gameover" ) then
+   if ( btn(4) and btn(5) and btn(2) ) then
      setup()
-    end
-  	ship:fire_weapon(btn(5))
+   else
     foreach(enemies,function(o) o:upd() end)
     return
-  end
+   end
+ end
 
 	g.timer+=1/60
 	choose_level()
@@ -42,7 +47,7 @@ function _update60()
 
   ship:upd() 
 
-  foreach(scores,function(o) o:upd() end)
+  foreach(floaters,function(o) o:upd() end)
   foreach(trails,function(o) o:upd() end)
   foreach(bullets,function(o) o:upd() end)
   foreach(enemies,function(o) o:upd() end)
@@ -76,22 +81,22 @@ function _draw()
   foreach(trails,function(o) o:drw() end)
   foreach(bullets,function(x) x:drw() end)
   foreach(enemies,function(e) e:drw() end)
-  foreach(scores,function(e) e:drw() end) 
+  foreach(floaters,function(e) e:drw() end) 
   ship:drw()
 
-  rectfill(ship.x-5,ship.y+6,ship.x-5+(15-#bullets/2),ship.y+8,9)
+  rectfill(ship.x-5,ship.y+6,ship.x-5+(10-#bullets/2),ship.y+8,9)
 
   if ( g.lives <= 0 ) then
-   	g.gamestate="GAMEOVER"
-   	print("G A M E  O V E R", cam_x+35,cam_y+50,7)
+   	g.gamestate="gameover"
+   	print("g a m e  o v e r", cam_x+35,cam_y+50,7)
     	if ( highscore==nil or g.score > highscore ) then
-   	 print("NEW HIGH SCORE! "..g.score, cam_x+35, cam_y+60, 7)
+   	 print("new high score! "..g.score, cam_x+35, cam_y+60, 7)
          highscore=g.score
          dset(0,highscore)
         else
-         print("S C O R E : "..g.score, cam_x+35, cam_y+60, 7)
+         print("s c o r e : "..g.score, cam_x+35, cam_y+60, 7)
         end
-         print("PRESS Z+X TO PLAY AGAIN",
+         print("press z+x+^ to play again",
 			cam_x+20, cam_y+70, 7)
   else
   	print(g.score,ship.x-5,ship.y+10,9)
@@ -99,9 +104,8 @@ function _draw()
        ..flr(g.timer).."."
        ..flr(g.timer%1 * 10^2),
        cam_x+40, cam_y+10, 7)
-  	print("e["..#enemies.."]",
-			cam_x+110,cam_y+10, 9)
-  	print(g.lives.."UP", cam_x+10,cam_y+10, 7)
+  	print(g.score, cam_x+110,cam_y+10, 9)
+  	print(g.lives.."up", cam_x+10,cam_y+10, 7)
   	print("hi:"..highscore, cam_x+10,cam_y, 8)
   end
 end  
@@ -136,8 +140,8 @@ ship = {
  end,
  fire_weapon = function (self,b)
   if b then
-   if #bullets < 30 then
-    fire_weapon(ship)
+   if #bullets < 20 then
+    fire_weapon(ship,20,0.01)
     sfx(5)
    end
   else
@@ -208,7 +212,7 @@ end,
 -- movement
 
 function is_moving_up(o)
- return o.a >= 0.5
+ return o.a > 0.5
 end
 
 function is_moving_down(o)
@@ -292,18 +296,11 @@ end
 
 
 function y_collide(o,f)
- local u_spr=mget(
-  							o.x/8,
-  							(o.y-o.r-1)/8)
-  			
- local d_spr=mget(
- 							 o.x/8,
- 								(o.y+o.r+1)/8)
- return (is_moving_up(o) and
-      fget(u_spr,f) )
-   or
-        (is_moving_down(o) and
-        fget(d_spr,f) )								
+ local u_spr=mget( o.x/8, (o.y-o.r-1)/8)
+ local d_spr=mget( o.x/8, (o.y+o.r+1)/8)
+
+ return (is_moving_up(o) and fget(u_spr,f) )
+   or (is_moving_down(o) and fget(d_spr,f) )								
 end
 
 -->8
@@ -338,7 +335,7 @@ function choose_level()
 --  elseif g.timer > g.lvl*8 and g.lvl>0 then
   elseif #enemies == 0 then
    level(g.lvl+1)
-   add_floater(ship.x,ship.y,"l e v e l "..g.lvl)
+   add_floater(ship.x,ship.y,"l e v e l "..g.lvl,3)
   end 
 end
 
@@ -360,38 +357,42 @@ end
 -- bullets
 bullets={}
 
-function fire_weapon(ship)
+function fire_weapon(ship,num,spread)
 
  local bullet = {
   what="bullet",
+  spread=spread,
+  num=num,
   offset=0,
   x=ship.x,
   y=ship.y,
-  a=ship.a,
+  a=ship.a+rnd(spread)-(spread/2),
   c=9,
   spd=4,
-  r=0.1,
+  r=0,
   dead_count=50,
   drw=function(self)
    pset(self.x,self.y,self.c)
   end,
   upd=function(self)
---   self.x=rnd(2)-1+self.x-cos(self.a)*self.spd
---   self.y=rnd(2)-1+self.y-sin(self.a)*self.spd
-   local df=rnd(0.1)-0.05
-   self.x=self.x-cos(self.a+df)*self.spd
-   self.y=self.y-sin(self.a+df)*self.spd
+   --local df=rnd(spread)-(spread/2)
+   self.x=self.x-cos(self.a)*self.spd
+   self.y=self.y-sin(self.a)*self.spd
 
    if self.new == nil then
     self.new=true
    else
     if (self.dead_count < 0) then 
      del(bullets,self)
-    elseif (x_collide(self,f_blk)) then
-     bounce_x(self,false)
-    elseif (y_collide(self,f_blk)) then
-     bounce_y(self,false) 
     else
+     if (x_collide(self,f_blk)) then
+       bounce_x(self,false)
+       self.dead_count=min(5,self.dead_count-1)
+     end
+     if (y_collide(self,f_blk)) then
+       bounce_y(self,false) 
+       self.dead_count=min(5,self.dead_count-1)
+     end
      self.dead_count-=1 
     end
    end
@@ -459,7 +460,7 @@ function add_enemy(x,y,l)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
     g.score+=1*l
-    add_floater(self.x,self.y,1*l)
+    add_score_floaters(self.x,self.y,1*l)
    end
    self.spmod=(self.spmod+1) %2
    self.dx=cos(self.a)*self.spd
@@ -496,6 +497,12 @@ function add_enemy(x,y,l)
  add(enemies,enemy)
 end
 
+function add_score_floaters(x,y,v)
+    add_floater(x,y,v,1)
+  if ( #enemies>0 ) then
+    add_floater(ship.x,ship.y,#enemies.." enemies left!",2)
+ end
+end
 
 function add_enemy_homing(x,y,l)
  local enemy={
@@ -516,7 +523,7 @@ function add_enemy_homing(x,y,l)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
     g.score+=1*l
-    add_floater(self.x,self.y,1*l)
+    add_score_floaters(self.x,self.y,1*l)
    end
    -- homing
    if self.x<ship.x then
@@ -538,29 +545,35 @@ function add_enemy_homing(x,y,l)
  add(enemies,enemy)
 end
 
-scores={}
+floaters={}
 
-function add_floater(x,y,s)
+pal_floaters = {
+ {11,3,11},{12,13,14},{10,7,10}
+}
+
+function add_floater(x,y,s,c)
  local scr={
   x=x,
   y=y,
   value=s,
   a=rnd(1),
   timer=120,
+  c=c,
   upd = function(self) 
    self.timer-=1
    if (self.timer<=0) then
-    del(scores,self)
+    del(floaters,self)
    else
     self.x+=cos(self.a)*0.5
     self.y+=sin(self.a)*0.5
    end
   end,
   drw = function(self)
-   print(self.value,self.x,self.y,9+(self.timer%3))
+   local plt=pal_floaters[c]
+   print(self.value,self.x,self.y,plt[1+self.timer%3])
   end
  }
- add(scores,scr)
+ add(floaters,scr)
 end
 
 function add_enemy_rocket(x,y,l)
@@ -582,7 +595,7 @@ function add_enemy_rocket(x,y,l)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
     g.score+=1*l
-    add_floater(self.x,self.y,1*l)
+    add_score_floaters(self.x,self.y,1*l)
    end
    -- homing
    if self.x<ship.x then
@@ -626,7 +639,7 @@ function add_enemy_balloon(x,y,l)
     	add_explosion(self.x,self.y,25)
     	del(enemies,self)
 	g.score+=1*l
-        add_floater(self.x,self.y,1*l)
+        add_score_floaters(self.x,self.y,1*l)
 	return
     end
    end
