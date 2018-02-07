@@ -2,55 +2,47 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 -- main
-sizex=32*8
-sizey=32*8
-
-lvl=0
-
-cam={
- x=0,
- y=0
-}
-
-timer=0
 
 function _init()
+	g = {
+		sizex=32*8,
+		sizey=32*8,
+		lvl=0,
+		timer=0,
+		gamestate="INIT",
+    highscore=0,
+    lives=3
+	}
+
 end
 
 function _update60()
-  timer+=1/60
-  choose_level()
-  if (btn(0)) change_a(ship, ship.a+ship.turnspeed-(ship.spd/500))
-  if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
-  
-  ship.spd-=0.02
-  if btn(4) then
-   ship.spd += 0.04
-  end
-  ship.acc = btn(4)
-  if btn(5) then
-   if #bullets < 30 then
-    fire_weapon(ship)
-    sfx(5)
-   end
-  else
-   ship.fire=0
-  end
+	g.timer+=1/60
+	choose_level()
 
+  if ( ship.cooldown <= 0 ) then
+  	if (btn(0)) change_a(ship, ship.a+ship.turnspeed-(ship.spd/500))
+  	if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
+  	ship:accelerate(btn(4))
+  	ship:fire_weapon(btn(5))
+  end
 
   ship:upd() 
+
   foreach(trails,function(o) o:upd() end)
   foreach(bullets,function(o) o:upd() end)
   foreach(enemies,function(o) o:upd() end)
+ 	foreach(explosions,function(o) o:upd() end)
  
- foreach(explosions,function(o) o:upd() end)
- 
- has_hit_enemy(ship,4,4,
+ 	has_hit_enemy(ship,4,4,
    function(e) 
     if not ship.dead then
      sfx(4)
      ship.dead=true 
      ship.death_count+=1
+     ship.cooldown=60
+     foreach(enemies,function(e) del(enemies,e)end)
+     g.lvl-=1
     end
    end)
 
@@ -58,10 +50,11 @@ end
 
 function _draw()
   cls()
- 
+  local cam_x=mid(0,ship.x-60,g.sizex)
+  local cam_y=mid(0,ship.y-60,g.sizey)
+
   map(0,0,0,0,128,128)
-  camera(mid(0,ship.x-60,sizex)
-        ,mid(0,ship.y-60,sizey))
+  camera(cam_x,cam_y)
 
   foreach(explosions,function(e) e:drw() end) 
   foreach(trails,function(o) o:drw() end)
@@ -75,11 +68,12 @@ function _draw()
   print(ship.death_count,ship.x+5,ship.y+10,13)
 
   print(ship.msg.." "
-       ..flr(timer).."."
-       ..flr(timer%1 * 10^2),
-       mid(35,ship.x-20,sizex-40),
-       mid(10,ship.y-50,sizey-40),
-       7)
+       ..flr(g.timer).."."
+       ..flr(g.timer%1 * 10^2),
+       cam_x+50, cam_y+10, 7)
+
+  print("e["..#enemies.."]",
+			cam_x+110,cam_y+10, 9)
 end  
 -->8
 --ship
@@ -103,6 +97,32 @@ ship = {
  grav=0.15,
  acc=false,
  accplt={15,14,8},
+ accelerate = function(self, b)
+  self.spd-=0.02
+  if b then
+   self.spd += 0.04
+  end
+  self.acc = b
+ end,
+ fire_weapon = function (self,b)
+  if b then
+   if #bullets < 30 then
+    fire_weapon(ship)
+    sfx(5)
+   end
+  else
+   self.fire=0
+  end
+end,
+ move = function (self)
+  if ( self.spd > 2 ) self.spd = 2
+  if ( self.spd < 0 ) self.spd = 0
+  if self.spd>0 then
+   add_trail(self)
+   self.x-=cos(self.a)*(self.spd)
+   self.y-=sin(self.a)*(self.spd)
+  end
+end,
  drw=function(self)
    if not self.dead 
       and self.acc then
@@ -115,8 +135,8 @@ ship = {
    end
   if not self.dead then
    p=0
-   if ( ship.fire > 0 ) then 
-    p = ship.fire
+   if ( self.fire > 0 ) then 
+    p = self.fire
    end
    circfill(self.x, self.y, self.r, 7)
    circfill(self.x, self.y, self.r-1, 6)
@@ -131,8 +151,17 @@ ship = {
    end
  end,
  upd=function(self)
+  self.cooldown-=1
   if self.dead then
-   add_explosion(self.x,self.y)
+   if self.spd > 0 then 
+    self.spd-=0.1
+   end
+   if ( self.cooldown %3 == 0) then 
+   	add_explosion(self.x,self.y,50)
+   end
+   if ( self.cooldown <= 0 ) then
+    self.dead=false
+   end
   end
   if ( self.spd > 0 ) then
    if x_collide(self,f_blk) then
@@ -142,21 +171,11 @@ ship = {
     bounce_y(self,true)
    end
   end 
-  move() 
+  self:move() 
  end
 }
 -->8
 -- movement
-
-function move()
-  if ( ship.spd > 2 ) ship.spd = 2
-  if ( ship.spd < 0 ) ship.spd = 0
-  if ship.spd>0 then
-   add_trail(ship)
-   ship.x-=cos(ship.a)*(ship.spd)
-   ship.y-=sin(ship.a)*(ship.spd)
-  end
-end
 
 function is_moving_up(o)
  return o.a >= 0.5
@@ -283,19 +302,26 @@ end
 
 -- levels
 function choose_level()
-  if timer > 1 and lvl==0 then
+  if (ship.dead or ship.cooldown > -40 ) return
+  if g.timer > 1 and g.lvl==0 then
    level(1)
-  elseif timer > lvl*8 and lvl>0 then
-   level(lvl+1)
+--  elseif g.timer > g.lvl*8 and g.lvl>0 then
+  elseif #enemies == 0 then
+   level(g.lvl+1)
   end 
 end
 
 function level(l)
- lvl=l
+ g.lvl=l
  for i=1,3+l do
   choose_enemy(l
-           ,20+rnd(sizex-50)
-           ,20+rnd(sizey-50))
+           ,20+rnd(g.sizex-50)
+           ,20+rnd(g.sizey-50))
+ end
+ if ( l%3==0) then
+    choose_enemy(l
+           ,20+rnd(g.sizex-50)
+           ,20+rnd(g.sizey-50),true)
  end
  ship.msg="level "..l
 end
@@ -368,7 +394,7 @@ plt_chgs={
  {7,7,7}
 }
 
-function choose_enemy(l,x,y)
+function choose_enemy(l,x,y,b)
  -- don't spawn on ship
  if x < ship.x-10 
     or x > ship.x+10
@@ -376,8 +402,9 @@ function choose_enemy(l,x,y)
     or y > ship.y+10
     then
      if (l%3==1) add_enemy(x,y,l)
-     if (l%3==2) add_enemy3(x,y,l)
-     if (l%3==0) add_enemy2(x,y,l)
+     if (l%3==2) add_enemy_balloon(x,y,l)
+     if (l%3==0) add_enemy_homing(x,y,l)
+		 if (b) add_enemy_rocket(x,y,l)
  end
 end
 
@@ -399,7 +426,7 @@ function add_enemy(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6,4)
-    add_explosion2(self.x,self.y)
+    add_explosion(self.x,self.y,25)
     del(enemies,self)
    end
    self.spmod=(self.spmod+1) %2
@@ -438,7 +465,7 @@ function add_enemy(x,y,l)
 end
 
 
-function add_enemy2(x,y,l)
+function add_enemy_homing(x,y,l)
  local enemy={
   offset=0,
   size=mid(4,l,8),
@@ -454,7 +481,7 @@ function add_enemy2(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6)
-    add_explosion2(self.x,self.y)
+    add_explosion(self.x,self.y,25)
     del(enemies,self)
    end
    -- homing
@@ -477,10 +504,49 @@ function add_enemy2(x,y,l)
  add(enemies,enemy)
 end
 
-function add_enemy3(x,y,l)
+function add_enemy_rocket(x,y,l)
  local enemy={
-  offset=l,
-  size=mid(2,l,8),
+  offset=0,
+  size=mid(4,l,8),
+  x=x,
+  y=y,
+  r=3,
+  dx=0,
+  dy=0,
+  a=rnd(1),
+  spd=1,
+  frame=0,
+  dead=false,
+  upd=function(self)
+   if (self.dead) then
+    sfx(6)
+    add_explosion(self.x,self.y,25)
+    del(enemies,self)
+   end
+   -- homing
+   if self.x<ship.x then
+    self.x+=self.spd
+   else
+    self.x-=self.spd
+   end
+   if self.y < ship.y then
+    self.y+=self.spd
+   else
+    self.y-=self.spd
+   end
+   add_trail(self)
+  end,
+  drw=function(self)
+   circfill(self.x,self.y,self.r,13)
+  end 
+ }
+ add(enemies,enemy)
+end
+
+function add_enemy_balloon(x,y,l)
+ local enemy={
+  offset=4,
+  size=8,
   x=x,
   y=y,
   r=4,
@@ -492,18 +558,25 @@ function add_enemy3(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6)
-    add_explosion2(self.x,self.y)
-    del(enemies,self)
+    if ( self.size > 2 ) then
+  		self.size-=1
+			self.offset=self.size/2
+			ship.e_count+=1
+    else
+    	add_explosion(self.x,self.y,25)
+    	del(enemies,self)
+			return
+		end
    end
    self.a+=0.01
-   self.dx=cos(self.a)*self.spd
-   self.dy=sin(self.a)*self.spd
-   if ( self.spd > 0 
-    and x_collide(self,f_blk) )
+   self.dx=cos(self.a)*(self.spd+(l/5))
+   self.dy=sin(self.a)*(self.spd+(l/5))
+   if self.spd > 0 and 
+      x_collide(self,f_blk) 
    then  
       bounce_x(self,false)
-   elseif ( self.spd > 0 
-      and y_collide(self,f_blk) ) 
+   elseif self.spd > 0 and 
+ 			y_collide(self,f_blk) 
    then
       bounce_y(self,false)
    else 
@@ -512,8 +585,8 @@ function add_enemy3(x,y,l)
    end
   end,
   drw=function(self) 
-    circfill(self.x,self.y,l,12)
-    circ(self.x,self.y,l,13)
+    circfill(self.x,self.y,self.size,12)
+    circ(self.x,self.y,self.size,13)
    end
  
  }
@@ -523,30 +596,11 @@ end
 -- explosions
 explosions={}
 
-function add_explosion(x,y)
+function add_explosion(x,y,t)
  local e={
   x=x,
   y=y,
-  s=1,
-  upd=function(self)
-   self.s+=1
-   if (self.s>30) then
-    del(explosions,self)
-    ship.dead=false
-   end
-  end,
-  drw=function(self)
-   circ(self.x,self.y,self.s,flr(rnd(16)))
-  end 
- }
- add(explosions,e)
-end
-
-function add_explosion2(x,y)
- local e={
-  x=x,
-  y=y,
-  t=25,
+  t=t,
   sparks={
    },
   upd=function(self)
