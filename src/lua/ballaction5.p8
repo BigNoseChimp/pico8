@@ -377,16 +377,7 @@ end
 
 function level(l)
  g.lvl=l
- for i=1,3+l do
-  choose_enemy(l
-           ,20+rnd(g.sizex-50)
-           ,20+rnd(g.sizey-50))
- end
- if ( l%3==0) then
-    choose_enemy(l
-           ,20+rnd(g.sizex-50)
-           ,20+rnd(g.sizey-50),true)
- end
+  choose_enemy(l)
  ship.msg="level "..l
 end
 -->8
@@ -467,18 +458,22 @@ plt_chgs={
  {7,7,7}
 }
 
-function choose_enemy(l,x,y,b)
+function choose_enemy(l)
+ for i=1,3+l do
  -- don't spawn on ship
- if x < ship.x-10 
-    or x > ship.x+10
-    or y < ship.y-10
-    or y > ship.y+10
+  local x = 20+rnd(g.sizex-50)
+  local y = 20+rnd(g.sizey-50)
+   if x < ship.x-10 
+      or x > ship.x+10
+      or y < ship.y-10
+      or y > ship.y+10
     then
-     if (l%3==1) add_enemy(x,y,l)
-     if (l%3==2) add_enemy_balloon(x,y,l)
-     if (l%3==0) add_enemy_homing(x,y,l)
-     if (l%4==0) add_enemy_rocket(x,y,l)
-     if (l%5==0) add_laser_enemy(x,y,l)
+     if (i%2==0) add_enemy(x,y,l)
+     if (i%3==0) add_enemy_balloon(x,y,l)
+     if (i%4==0) add_enemy_homing(x,y,l)
+     if (i%5==0) add_enemy_rocket(x,y,l)
+     if (i%6==0) add_laser_enemy(x,y,l)
+   end
  end
 end
 
@@ -680,6 +675,7 @@ function add_enemy_rocket(x,y,l)
     del(enemies,self)
     g.score+=1*l
     add_score_floaters(self.x,self.y,1*l)
+    return
    end
    -- homing
    if self.x<ship.x then
