@@ -594,6 +594,7 @@ end
 
 function add_enemy_homing(x,y,l)
  local enemy={
+  lives=2,
   canbehit=true,
   size=mid(4,l,8),
   x=x,
@@ -608,11 +609,15 @@ function add_enemy_homing(x,y,l)
   dead=false,
   upd=function(self)
    if (self.dead) then
-    sfx(6)
-    add_explosion(self.x,self.y,25)
-    del(enemies,self)
-    g.score+=1*l
-    add_score_floaters(self.x,self.y,1*l)
+    if self.lives>0 then
+     self.lives-=1
+    else
+     sfx(6)
+     add_explosion(self.x,self.y,25)
+     del(enemies,self)
+     g.score+=1*l
+     add_score_floaters(self.x,self.y,1*l)
+    end
    end
    -- homing
    if self.x<ship.x then
@@ -718,13 +723,13 @@ function add_enemy_balloon(x,y,l)
   dx=0,
   dy=0,
   a=rnd(1),
-  spd=1,
+  spd=0.3,
   dead=false,
   upd=function(self)
    if (self.dead) then
     sfx(6)
     if ( self.r > 2 ) then
-  	self.r-=0.3
+  	self.r-=0.15
     else
     	add_explosion(self.x,self.y,25)
     	del(enemies,self)
@@ -742,8 +747,8 @@ function add_enemy_balloon(x,y,l)
       bounce_y(self,false)
    end
    self.a+=0.01
-   self.dx=cos(self.a)*(self.spd+(l/5))
-   self.dy=sin(self.a)*(self.spd+(l/5))
+   self.dx=cos(self.a)*(self.spd)
+   self.dy=sin(self.a)*(self.spd)
    self.x-=self.dx
    self.y-=self.dy
   end,
