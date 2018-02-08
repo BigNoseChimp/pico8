@@ -13,6 +13,7 @@ end
 function setup()
  g.score=0
  g.sizex=32*8
+ g.maxbullets=20
 	g.sizey=32*8
 	g.lvl=0
 	g.timer=0
@@ -43,6 +44,7 @@ function _update60()
   	if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
   	ship:accelerate(btn(4))
   	ship:fire_weapon(btn(5))
+        ship:fire_smartbomb(btnp(2) or btnp(3))
   end
 
   ship:upd() 
@@ -53,8 +55,13 @@ function _update60()
   foreach(enemies,function(o) o:upd() end)
   foreach(explosions,function(o) o:upd() end)
  
-  has_hit_enemy(ship,4,4,
+  has_hit_enemy(ship,
    function(e) 
+    killShip()
+   end)
+end
+
+function killShip()
     if not ship.dead then
      sfx(4)
      ship.dead=true 
@@ -66,7 +73,6 @@ function _update60()
      end
      g.lvl-=1
     end
-   end)
 end
 
 function _draw()
@@ -83,8 +89,8 @@ function _draw()
   foreach(enemies,function(e) e:drw() end)
   foreach(floaters,function(e) e:drw() end) 
   ship:drw()
-
-  rectfill(ship.x-5,ship.y+6,ship.x-5+(10-#bullets/2),ship.y+8,9)
+  
+  rectfill(ship.x-5,ship.y+6,ship.x-5+g.maxbullets-#bullets,ship.y+8,9)
 
   if ( g.lives <= 0 ) then
    	g.gamestate="gameover"
@@ -99,7 +105,6 @@ function _draw()
          print("press z+x+^ to play again",
 			cam_x+20, cam_y+70, 7)
   else
-  	print(g.score,ship.x-5,ship.y+10,9)
   	print(ship.msg.." "
        ..flr(g.timer).."."
        ..flr(g.timer%1 * 10^2),
@@ -112,17 +117,17 @@ end
 -->8
 --ship
 ship = {
- offset=2,
+ what="ship",
  cooldown=0,
  score=0,
  death_count=0,
  msg="",
  dead=false,
- what="ship",
  fire=0,
  x=60,
  y=60,
  r=4,
+ circle=true,
  a=0,
  turnspeed=0.025,
  p=100,
@@ -138,10 +143,19 @@ ship = {
   end
   self.acc = b
  end,
+ fire_smartbomb = function (self,b)
+   if b then
+     -- fire remaining bullets
+     local increment=1/(g.maxbullets-#bullets)
+     for i=0,1,increment do
+      fire_weapon(self,0,i)
+     end
+   end
+ end,
  fire_weapon = function (self,b)
   if b then
-   if #bullets < 20 then
-    fire_weapon(ship,20,0.01)
+   if #bullets < g.maxbullets then
+    fire_weapon(self,0.01,nil)
     sfx(5)
    end
   else
@@ -220,7 +234,7 @@ function is_moving_down(o)
 end
 
 function is_moving_right(o)
- return o.a>=0.25 and o.a<=0.75
+ return o.a>=0.25 and o.a<0.75
 end
 
 function is_moving_left(o)
@@ -237,13 +251,11 @@ function change_a(o, newa)
 end
 
 function bounce_x(o,s)
--- if (spd < 0.2 ) spd = 0.2
   change_a(o, 0.5 - o.a)
   if (s) sfx(0)
 end
 
 function bounce_y(o,s)
--- if ( spd < 0.2) spd = 0.2
   change_a(o, 1 - o.a)
   if (s) sfx(0)
 end
@@ -254,24 +266,39 @@ end
 f_blk=1
 f_bad=2
 
-function has_hit_enemy(o,width,height,f)
+function has_hit_enemy(o,f)
+ local left_x=o.x
+ local right_x=o.x+o.r
+ local up_y=o.y
+ local down_y=o.y+o.r
+ if ( o.circle ) then
+  left_x-=o.r
+  up_y-=o.r
+ end
+
  foreach(enemies,
   function(e)
-   local x=o.x-o.offset
-   local y=o.y-o.offset
+   if not e.canbehit then
+    return
+   end
+   local e_left_x=e.x
+   local e_right_x=e.x+e.r
+   local e_up_y=e.y
+   local e_down_y=e.y+e.r
+   if ( e.circle ) then
+    e_left_x-=e.r
+    e_up_y-=e.r
+   end
  
-   x=flr(x)
-   y=flr(y)
-
    if ( 
      -- leftmost o right of rightmost e
-     (x > e.x-e.offset+e.size*2) or
+     (left_x > e_right_x) or
      -- rightmost o left of leftmost e
-     (x+width < e.x-e.offset) or
+     (right_x < e_left_x) or
      -- topmost o below bottom e
-     (y > e.y-e.offset+e.size*2) or -- todo: e.height
+     (up_y > e_down_y) or
      -- bottommost o above top e
-     (y+height < (e.y-e.offset))
+     (down_y < e_up_y)
     ) then
       -- ok
     else
@@ -281,26 +308,33 @@ function has_hit_enemy(o,width,height,f)
  end
 
 function x_collide(o,f)
- local l_spr=mget(
-  							(o.x-o.r-1)/8,
-  							o.y/8) 			
- local r_spr=mget(
- 								(o.x+o.r+1)/8,
- 								o.y/8)
- return (is_moving_right(o) and
-      fget(r_spr,f) )
-   or
-        (is_moving_left(o) and
-        fget(l_spr,f) )								
+ local left_x=o.x-1
+ local right_x=o.x+o.r+1
+ if ( o.circle ) then 
+  left_x-=o.r
+ end
+ local l_spr=mget( left_x/8, o.y/8) 			
+ local r_spr=mget( right_x/8, o.y/8)
+
+ return fget(r_spr,f) or fget(l_spr,f) 
+-- return (is_moving_right(o) and fget(r_spr,f) )
+--   or (is_moving_left(o) and fget(l_spr,f) )								
 end
 
 
 function y_collide(o,f)
- local u_spr=mget( o.x/8, (o.y-o.r-1)/8)
- local d_spr=mget( o.x/8, (o.y+o.r+1)/8)
+ local up_y=o.y-1
+ local down_y=o.y+o.r+1
+ if ( o.circle ) then 
+  up_y-=o.r
+ end
 
- return (is_moving_up(o) and fget(u_spr,f) )
-   or (is_moving_down(o) and fget(d_spr,f) )								
+ local u_spr=mget( o.x/8, up_y/8)
+ local d_spr=mget( o.x/8, down_y/8)
+
+ return fget(u_spr,f) or fget(d_spr,f) 
+ --return (is_moving_up(o) and fget(u_spr,f) )
+ --  or (is_moving_down(o) and fget(d_spr,f) )								
 end
 
 -->8
@@ -336,6 +370,8 @@ function choose_level()
   elseif #enemies == 0 then
    level(g.lvl+1)
    add_floater(ship.x,ship.y,"l e v e l "..g.lvl,3)
+   add_floater(ship.x,ship.y,"l e v e l "..g.lvl,3)
+   add_floater(ship.x,ship.y,"l e v e l "..g.lvl,3)
   end 
 end
 
@@ -357,13 +393,14 @@ end
 -- bullets
 bullets={}
 
-function fire_weapon(ship,num,spread)
+
+function fire_weapon(ship,spread,ao)
 
  local bullet = {
   what="bullet",
+  circle=false,
   spread=spread,
-  num=num,
-  offset=0,
+  a_override=ao,
   x=ship.x,
   y=ship.y,
   a=ship.a+rnd(spread)-(spread/2),
@@ -376,8 +413,13 @@ function fire_weapon(ship,num,spread)
   end,
   upd=function(self)
    --local df=rnd(spread)-(spread/2)
-   self.x=self.x-cos(self.a)*self.spd
-   self.y=self.y-sin(self.a)*self.spd
+   if ( self.a_override == nil ) then
+    self.x=self.x-cos(self.a)*self.spd
+    self.y=self.y-sin(self.a)*self.spd
+   else
+    self.x=self.x-cos(self.a_override)*self.spd
+    self.y=self.y-sin(self.a_override)*self.spd
+   end
 
    if self.new == nil then
     self.new=true
@@ -396,7 +438,7 @@ function fire_weapon(ship,num,spread)
      self.dead_count-=1 
     end
    end
-   has_hit_enemy(self,0,0,
+   has_hit_enemy(self,
       function(e) 
        if not e.dead then
         e.dead=true
@@ -435,17 +477,57 @@ function choose_enemy(l,x,y,b)
      if (l%3==1) add_enemy(x,y,l)
      if (l%3==2) add_enemy_balloon(x,y,l)
      if (l%3==0) add_enemy_homing(x,y,l)
-		 if (b) add_enemy_rocket(x,y,l)
+     if (l%4==0) add_enemy_rocket(x,y,l)
+     if (l%5==0) add_laser_enemy(x,y,l)
  end
+end
+
+
+function add_laser_enemy(x,y,l)
+ local enemy={
+  canbehit=false,
+  dead=false,
+  countdown=500,
+  plt={8,9,10},
+  upd=function(self)
+   self.countdown-=1
+   if self.countdown < -150 then
+     del(enemies,self)
+   elseif self.countdown<=0 then
+     -- if ship on any of our y axis then it's dead
+     for y=10,g.sizey-10,30 do
+       if flr(ship.y) == flr(y) then
+         killShip()
+       end
+     end
+   end
+  end,
+  drw=function(self)
+   local pidx=3
+   if self.countdown < 50 then
+    pidx=1
+   elseif self.countdown < 350 then 
+    pidx=2
+   end
+   local p=self.plt[1]
+   if self.countdown%(pidx*2)==0 then
+    for y=10,g.sizey-10,30 do
+     rectfill(8,y,g.sizex-8,y,self.plt[pidx])
+    end
+   end
+  end
+ }
+ add(enemies,enemy)
 end
 
 function add_enemy(x,y,l)
  local enemy={
-  offset=0,
+  canbehit=true,
   size=8,
   x=x,
   y=y,
-  r=4,
+  r=8,
+  circle=false,
   dx=0,
   dy=0,
   sp=4,
@@ -468,17 +550,17 @@ function add_enemy(x,y,l)
    if(rnd(10)<1) then
     self.frame=(self.frame+1)%9   
    end
+   self.x-=self.dx
+   self.y-=self.dy
    if ( self.spd > 0 
     and x_collide(self,f_blk) )
    then  
       bounce_x(self,false)
-   elseif ( self.spd > 0 
+   end
+   if ( self.spd > 0 
       and y_collide(self,f_blk) ) 
    then
       bounce_y(self,false)
-   else 
-      self.x-=self.dx
-      self.y-=self.dy
    end
   end,
   drw=function(self)
@@ -506,11 +588,12 @@ end
 
 function add_enemy_homing(x,y,l)
  local enemy={
-  offset=0,
+  canbehit=true,
   size=mid(4,l,8),
   x=x,
   y=y,
-  r=4,
+  r=8,
+  circle=false,
   dx=0,
   dy=0,
   a=rnd(1),
@@ -578,11 +661,12 @@ end
 
 function add_enemy_rocket(x,y,l)
  local enemy={
-  offset=0,
+  canbehit=true,
   size=mid(4,l,8),
   x=x,
   y=y,
   r=3,
+  circle=true,
   dx=0,
   dy=0,
   a=rnd(1),
@@ -619,11 +703,11 @@ end
 
 function add_enemy_balloon(x,y,l)
  local enemy={
-  offset=4,
-  size=8,
+  canbehit=true,
+  circle=true,
   x=x,
   y=y,
-  r=4,
+  r=8,
   dx=0,
   dy=0,
   a=rnd(1),
@@ -632,9 +716,8 @@ function add_enemy_balloon(x,y,l)
   upd=function(self)
    if (self.dead) then
     sfx(6)
-    if ( self.size > 2 ) then
-  	self.size-=1
-	self.offset=self.size/2
+    if ( self.r > 2 ) then
+  	self.r-=0.3
     else
     	add_explosion(self.x,self.y,25)
     	del(enemies,self)
@@ -643,25 +726,23 @@ function add_enemy_balloon(x,y,l)
 	return
     end
    end
+   if x_collide(self,f_blk) 
+   then  
+      bounce_x(self,false)
+   end
+   if y_collide(self,f_blk) 
+   then
+      bounce_y(self,false)
+   end
    self.a+=0.01
    self.dx=cos(self.a)*(self.spd+(l/5))
    self.dy=sin(self.a)*(self.spd+(l/5))
-   if self.spd > 0 and 
-      x_collide(self,f_blk) 
-   then  
-      bounce_x(self,false)
-   elseif self.spd > 0 and 
- 			y_collide(self,f_blk) 
-   then
-      bounce_y(self,false)
-   else 
-      self.x-=self.dx
-      self.y-=self.dy
-   end
+   self.x-=self.dx
+   self.y-=self.dy
   end,
   drw=function(self) 
-    circfill(self.x,self.y,self.size,12)
-    circ(self.x,self.y,self.size,13)
+    circfill(self.x,self.y,self.r,12)
+    circ(self.x,self.y,self.r,13)
    end
  
  }
