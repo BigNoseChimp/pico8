@@ -377,7 +377,7 @@ end
 
 function level(l)
  g.lvl=l
-  choose_enemy(l)
+  choose_enemies(l)
  ship.msg="level "..l
 end
 -->8
@@ -458,22 +458,33 @@ plt_chgs={
  {7,7,7}
 }
 
-function choose_enemy(l)
- for i=1,3+l do
- -- don't spawn on ship
-  local x = 20+rnd(g.sizex-50)
-  local y = 20+rnd(g.sizey-50)
-   if x < ship.x-10 
-      or x > ship.x+10
-      or y < ship.y-10
-      or y > ship.y+10
+function spawnAwayFromShip()
+  while true do
+   local coord={
+    x = 20+rnd(g.sizex-50),
+    y = 20+rnd(g.sizey-50)
+   }
+   if coord.x < ship.x-32 
+      or coord.x > ship.x+32
+      or coord.y < ship.y-32
+      or coord.y > ship.y+32
     then
-     if (i%2==0) add_enemy(x,y,l)
-     if (i%3==0) add_enemy_balloon(x,y,l)
-     if (i%4==0) add_enemy_homing(x,y,l)
-     if (i%5==0) add_enemy_rocket(x,y,l)
-     if (i%6==0) add_laser_enemy(x,y,l)
+     return coord
+    end
+  end
+end
+
+function choose_enemies(l)
+ for i=1,1+l do
+   coord=spawnAwayFromShip()
+   if (i%2==0) then 
+       add_enemy(coord.x,coord.y,l)
+       add_enemy(coord.x,coord.y,l)
    end
+   if (i%4==0) add_enemy_balloon(coord.x,coord.y,l)
+   if (i%5==0) add_enemy_homing(coord.x,coord.y,l)
+   if (i%6==0) add_enemy_rocket(coord.x,coord.y,l)
+   if (i%7==0) add_laser_enemy(coord.x,coord.y,l)
  end
 end
 
@@ -657,7 +668,7 @@ end
 function add_enemy_rocket(x,y,l)
  local enemy={
   canbehit=true,
-  size=mid(4,l,8),
+  size=3,
   x=x,
   y=y,
   r=3,
