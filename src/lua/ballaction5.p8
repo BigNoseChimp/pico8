@@ -11,6 +11,7 @@ function _init()
 end
 
 function setup()
+ g.version=0.2
  g.score=0
  g.sizex=32*8
  g.maxbullets=20
@@ -44,7 +45,7 @@ function _update60()
   	if (btn(1)) change_a(ship, ship.a-ship.turnspeed-(ship.spd/500))
   	ship:accelerate(btn(4))
   	ship:fire_weapon(btn(5))
-        ship:fire_smartbomb(btnp(2) or btnp(3))
+   ship:fire_smartbomb(btnp(2) or btnp(3))
   end
 
   ship:upd() 
@@ -57,11 +58,11 @@ function _update60()
  
   has_hit_enemy(ship,
    function(e) 
-    killShip()
+    killship()
    end)
 end
 
-function killShip()
+function killship()
     if not ship.dead then
      sfx(4)
      ship.dead=true 
@@ -94,6 +95,7 @@ function _draw()
 
   if ( g.lives <= 0 ) then
    	g.gamestate="gameover"
+    rectfill(cam_x+17, cam_y+45,cam_x+120, cam_y+80,1)
    	print("g a m e  o v e r", cam_x+35,cam_y+50,7)
     	if ( highscore==nil or g.score > highscore ) then
    	 print("new high score! "..g.score, cam_x+35, cam_y+60, 7)
@@ -113,6 +115,7 @@ function _draw()
   	print(g.lives.."up", cam_x+10,cam_y+10, 7)
   	print("hi:"..highscore, cam_x+10,cam_y, 8)
   end
+  print("version "..g.version, cam_x+10,cam_y+120, 1)
 end  
 -->8
 --ship
@@ -123,7 +126,8 @@ ship = {
  death_count=0,
  msg="",
  dead=false,
- fire=0,
+ fire=false,
+ sfire=false,
  x=60,
  y=60,
  r=4,
@@ -147,20 +151,21 @@ ship = {
    if b then
      -- fire remaining bullets
      local increment=1/(g.maxbullets-#bullets)
-     for i=0,1,increment do
+      sfx(7,0,#bullets,g.maxbullets)
+     for i=0,1,increment do      
       fire_weapon(self,0,i)
      end
    end
+   self.sfire=b
  end,
  fire_weapon = function (self,b)
   if b then
    if #bullets < g.maxbullets then
     fire_weapon(self,0.01,nil)
-    sfx(5)
+    sfx(5,0)
    end
-  else
-   self.fire=0
   end
+  self.fire=b
 end,
  move = function (self)
   if ( self.spd > 2 ) self.spd = 2
@@ -174,7 +179,7 @@ end,
  drw=function(self)
    if not self.dead 
       and self.acc then
-   sfx(flr(self.spd)+1)
+   sfx(flr(self.spd)+1,1)
    -- fillp(flr(rnd(32768)))
    circfill(self.x+cos(self.a)*self.r
            ,self.y+sin(self.a)*self.r
@@ -182,12 +187,16 @@ end,
            ,self.accplt[flr(self.spd)+1])
    end
   if not self.dead then
-   p=0
-   if ( self.fire > 0 ) then 
-    p = self.fire
+   p=15
+   if ( self.fire ) then 
+    p = 9
    end
-   circfill(self.x, self.y, self.r, 7)
-   circfill(self.x, self.y, self.r-1, 6)
+   sp=7
+   if ( self.sfire ) then
+    sp=9
+   end
+   circfill(self.x, self.y, self.r,sp)
+   circfill(self.x, self.y, self.r-2,12)
  
   --line(self.x,self.y
   --    ,self.x+cos(self.a)*self.r
@@ -242,27 +251,51 @@ function is_moving_left(o)
 end
 
 -->8
--- bounce
+-- explosions
+explosions={}
 
-function change_a(o, newa)
- o.a = newa
- if ( o.a > 1 ) o.a = o.a-1
- if ( o.a <= 0 ) o.a = 1+o.a
+function add_explosion(x,y,t)
+ local e={
+  x=x,
+  y=y,
+  t=t,
+  sparks={
+   },
+  upd=function(self)
+   if #self.sparks<=0 then
+    for i=1,30 do
+     local spark={
+      x=x,
+      y=y,
+      a=rnd(1),
+      col=7
+     }
+     add(self.sparks,spark)
+    end
+   elseif self.t < 0 then
+    del(explosions,self)
+   else
+    self.t-=1
+    foreach(self.sparks,
+     function(o)
+      o.x=o.x+(rnd(1)-0.5)+cos(o.a)/2
+      o.y=o.y+(rnd(1)-0.5)+sin(o.a)/2
+     end)
+   end
+  end,
+  drw=function(self)
+   foreach(self.sparks,
+    function(o)
+     pset(o.x,o.y,o.col)
+    end)
+  end 
+ }
+ add(explosions,e)
+
 end
-
-function bounce_x(o,s)
-  change_a(o, 0.5 - o.a)
-  if (s) sfx(0)
-end
-
-function bounce_y(o,s)
-  change_a(o, 1 - o.a)
-  if (s) sfx(0)
-end
-
 
 -->8
--- collision
+-- collision and bounce
 f_blk=1
 f_bad=2
 
@@ -316,9 +349,9 @@ function x_collide(o,f)
  local l_spr=mget( left_x/8, o.y/8) 			
  local r_spr=mget( right_x/8, o.y/8)
 
- return fget(r_spr,f) or fget(l_spr,f) 
--- return (is_moving_right(o) and fget(r_spr,f) )
---   or (is_moving_left(o) and fget(l_spr,f) )								
+-- return fget(r_spr,f) or fget(l_spr,f) 
+ return (is_moving_right(o) and fget(r_spr,f) )
+   or (is_moving_left(o) and fget(l_spr,f) )								
 end
 
 
@@ -332,9 +365,27 @@ function y_collide(o,f)
  local u_spr=mget( o.x/8, up_y/8)
  local d_spr=mget( o.x/8, down_y/8)
 
- return fget(u_spr,f) or fget(d_spr,f) 
- --return (is_moving_up(o) and fget(u_spr,f) )
- --  or (is_moving_down(o) and fget(d_spr,f) )								
+-- return fget(u_spr,f) or fget(d_spr,f) 
+ return (is_moving_up(o) and fget(u_spr,f) )
+   or (is_moving_down(o) and fget(d_spr,f) )								
+end
+
+-- bounce
+
+function change_a(o, newa)
+ o.a = newa
+ if ( o.a > 1 ) o.a = o.a-1
+ if ( o.a <= 0 ) o.a = 1+o.a
+end
+
+function bounce_x(o,s)
+  change_a(o, 0.5 - o.a)
+  if (s) sfx(0)
+end
+
+function bounce_y(o,s)
+  change_a(o, 1 - o.a)
+  if (s) sfx(0)
 end
 
 -->8
@@ -441,7 +492,7 @@ function fire_weapon(ship,spread,ao)
  add(bullets,bullet)
 end
 -->8
--- enemies and explosions
+-- enemies
 -- pallette 7,15,14,8
 enemies={}
 
@@ -458,7 +509,7 @@ plt_chgs={
  {7,7,7}
 }
 
-function spawnAwayFromShip()
+function spawnawayfromship()
   while true do
    local coord={
     x = 20+rnd(g.sizex-50),
@@ -476,7 +527,7 @@ end
 
 function choose_enemies(l)
  for i=1,1+l do
-   coord=spawnAwayFromShip()
+   coord=spawnawayfromship()
    if (i%2==0) then 
        add_enemy(coord.x,coord.y,l)
        add_enemy(coord.x,coord.y,l)
@@ -503,7 +554,7 @@ function add_laser_enemy(x,y,l)
      -- if ship on any of our y axis then it's dead
      for y=10,g.sizey-10,30 do
        if flr(ship.y) == flr(y) then
-         killShip()
+         killship()
        end
      end
    end
@@ -544,7 +595,7 @@ function add_enemy(x,y,l)
   dead=false,
   upd=function(self)
    if (self.dead) then
-    sfx(6,4)
+    sfx(6,3)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
     g.score+=1*l
@@ -612,7 +663,7 @@ function add_enemy_homing(x,y,l)
     if self.lives>0 then
      self.lives-=1
     else
-     sfx(6)
+     sfx(6,3)
      add_explosion(self.x,self.y,25)
      del(enemies,self)
      g.score+=1*l
@@ -686,7 +737,7 @@ function add_enemy_rocket(x,y,l)
   dead=false,
   upd=function(self)
    if (self.dead) then
-    sfx(6)
+    sfx(6,3)
     add_explosion(self.x,self.y,25)
     del(enemies,self)
     g.score+=1*l
@@ -727,7 +778,7 @@ function add_enemy_balloon(x,y,l)
   dead=false,
   upd=function(self)
    if (self.dead) then
-    sfx(6)
+    sfx(6,3)
     if ( self.r > 2 ) then
   	self.r-=0.15
     else
@@ -761,48 +812,7 @@ function add_enemy_balloon(x,y,l)
  add(enemies,enemy)
 end
 
--- explosions
-explosions={}
 
-function add_explosion(x,y,t)
- local e={
-  x=x,
-  y=y,
-  t=t,
-  sparks={
-   },
-  upd=function(self)
-   if #self.sparks<=0 then
-    for i=1,30 do
-     local spark={
-      x=x,
-      y=y,
-      a=rnd(1),
-      col=7
-     }
-     add(self.sparks,spark)
-    end
-   elseif self.t < 0 then
-    del(explosions,self)
-   else
-    self.t-=1
-    foreach(self.sparks,
-     function(o)
-      o.x=o.x+(rnd(1)-0.5)+cos(o.a)/2
-      o.y=o.y+(rnd(1)-0.5)+sin(o.a)/2
-     end)
-   end
-  end,
-  drw=function(self)
-   foreach(self.sparks,
-    function(o)
-     pset(o.x,o.y,o.col)
-    end)
-  end 
- }
- add(explosions,e)
-
-end
 __gfx__
 00000000066666600000000000000000000880000000000099009908000880000008800000088000000000000000000000000000000000000000000000000000
 000000006cccccc60000000111110000008ee800088ee88089009088008888000088820000088000000000000000000000000000000000000000000000000000
@@ -1036,13 +1046,14 @@ __map__
 0119191919191919191919191919191919191919191919191919191919191919010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0119191919191919191919191919191919191919191919191919191919191919010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
-0001000000000120501305015050180501a0501f05025050260500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0001000000000120501305015000180001a0001f00025000260000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00010000086000160008610106001060010600106001060010600106000f6000f6000f6000f6000f6000f6000f600000000000000000000000000000000000000000000000000000000000000000000000000000
 000200000260007610186002160021600216002160021600206002060020600206002060020600206002060020600216000000000000000000000000000000000000000000000000000000000000000000000000
 000300000961001000200003b600200003b6003b6003b6003b6003b6003b6003b6003b6003b6003b6003b6003b6003a6003a60000000000000000000000000000000000000000000000000000000000000000000
 001000000f1500c1500a1500715005150031500315006100011000110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-001000000b11019700000000b10000000000000000000000000000000000000000002570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000700001a6100b650076500f650056500965003650016501f60002650000002b6000a600000000000000000366000000000000000003560000000000000a6000000000000000002460000000000000000000000
+000100003150028510000000b10000000000000000000000000000000000000000002570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000300001a6100b610076100f610056100961003610016001f60002610000002c8002d900000000000000000366000000000000000003560000000000000a6000000000000000002460000000000000000000000
+000200001d4101d410274001b4101b4102540019400194101f40017400164101e400164001341018400174001041016400144000f410114000d4000f410094000540003410014000840007410134000640006410
 __music__
 00 01424344
 
